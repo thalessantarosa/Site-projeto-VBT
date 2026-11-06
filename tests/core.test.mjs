@@ -17,6 +17,7 @@ test('decodifica a amostra BLE conhecida, respeitando offset e unidades do proto
 
 test('CSV preserva metadados com aspas, quebras de linha e várias séries, inclusive série vazia', () => {
   const first = core.createSeries({ exercise: 'Remada, livre', loadKg: 42.5, notes: 'Linha "um"\r\nLinha dois' });
+  first.metadata.athlete = { name: 'Pessoa A', setup: 'Montagem 1' };
   core.appendSample(first, [0, 0, 0.00000001, -12.3456789, 9.81, 1.2, 0, 0]);
   core.finishSeries(first);
   const empty = core.finishSeries(core.createSeries({ exercise: 'Supino', loadKg: 0 }));
@@ -24,6 +25,13 @@ test('CSV preserva metadados com aspas, quebras de linha e várias séries, incl
   assert.throws(() => core.parseCSV('id,seq\na,1'), /colunas/);
   assert.throws(() => core.parseCSV(core.serializeCSV([first]).replace('1e-8', 'NaN')), /Amostra/);
   assert.throws(() => core.parseCSV('"campo aberto'), /CSV/);
+});
+
+test('duração usa a extensão do relógio de aquisição mesmo com chegada fora de ordem', () => {
+  const series = core.createSeries({ exercise: 'Supino', loadKg: 60 });
+  for (const [seq, time] of [[0, 0], [2, 20000], [1, 10000]]) core.appendSample(series, [seq, time, 0, 0, 9.81, 0, 0, 0]);
+  assert.equal(core.seriesDurationSeconds(series), 0.02);
+  assert.deepEqual(series.samples.map(sample => sample[1]), [0, 20000, 10000]);
 });
 
 test('JSON restaura uma ou várias séries e recusa arquivos inválidos sem confiar em métricas externas', () => {

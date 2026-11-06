@@ -6,6 +6,7 @@ export class CaptureController extends EventTarget {
   #state = 'disconnected';
   #series = null;
   #busy = false;
+  #recovery = null;
 
   constructor({ device, store }) {
     super();
@@ -31,12 +32,12 @@ export class CaptureController extends EventTarget {
 
   get state() { return this.#state; }
   get series() { return this.#series; }
-  get busy() { return this.#busy; }
+  get busy() { return this.#busy || Boolean(this.#recovery); }
 
   #change() { this.dispatchEvent(new Event('change')); }
 
   #available() {
-    if (this.#busy) throw new Error('Aguarde a operação atual terminar.');
+    if (this.busy) throw new Error('Aguarde a operação atual terminar.');
   }
 
   #interrupt(error) {
@@ -44,7 +45,10 @@ export class CaptureController extends EventTarget {
       finishSeries(this.#series, 'interrupted');
       this.#state = 'pending';
       // The pending series is retained even if the device cannot acknowledge STOP.
-      Promise.resolve().then(() => this.#device.stop()).catch(() => {});
+      this.#recovery = Promise.resolve().then(() => this.#device.stop()).catch(() => {
+        // No acknowledgment means the physical acquisition state is unknown.
+        this.#device.disconnect();
+      }).finally(() => { this.#recovery = null; this.#change(); });
       this.#change();
     }
     this.dispatchEvent(new CustomEvent('error', { detail: error }));

@@ -3,6 +3,9 @@ import { channelValue } from './core.js';
 // Color and line pattern both identify a series; no smoothing or fabricated points.
 export const SERIES_COLORS = ['#176451', '#356fa4', '#a35b1f', '#77549c', '#b03f60', '#526c29'];
 export const SERIES_DASHES = [[], [7, 4], [2, 4], [10, 3, 2, 3], [12, 5], [3, 3, 8, 3]];
+export function seriesStyle(index) {
+  return { color: SERIES_COLORS[index % SERIES_COLORS.length], dash: SERIES_DASHES[(index + Math.floor(index / SERIES_COLORS.length)) % SERIES_DASHES.length] };
+}
 const number = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 
 export function drawChart(canvas, series = [], channel = 'az', normalized = false) {
@@ -55,8 +58,9 @@ export function drawChart(canvas, series = [], channel = 'az', normalized = fals
   ctx.save(); ctx.beginPath(); ctx.rect(left, top, plotW, plotH); ctx.clip();
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index], duration = row.maxT - row.minT;
-    ctx.strokeStyle = SERIES_COLORS[index % SERIES_COLORS.length];
-    ctx.setLineDash(SERIES_DASHES[index % SERIES_DASHES.length]); ctx.lineWidth = 1.6;
+    const style = seriesStyle(index);
+    ctx.strokeStyle = style.color;
+    ctx.setLineDash(style.dash); ctx.lineWidth = 1.6;
     ctx.beginPath();
     let previous = null;
     for (const sample of row.series.samples) {

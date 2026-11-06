@@ -11,6 +11,16 @@ const trackers = new WeakMap();
 const blankQuality = () => ({ missingPackets: 0, outOfOrder: 0, duplicates: 0, totalSamples: 0 });
 const blankDerived = () => ({ version: null, meanConcentricVelocityMs: null, oneRmKg: null, validated: false });
 
+function createId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // getRandomValues is also available in ordinary HTTP contexts (demo only).
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function validateSample(sample) {
   if (!Array.isArray(sample) || sample.length !== 8 || !sample.every(Number.isFinite)
       || !Number.isInteger(sample[0]) || sample[0] < 0 || sample[0] > 65535
@@ -31,7 +41,7 @@ export function createSeries({ exercise, loadKg, notes = '', source = 'bluetooth
   if (!Number.isFinite(sampleRateHz) || sampleRateHz <= 0) throw new Error('Taxa de amostragem inválida.');
   return {
     schemaVersion: 1,
-    metadata: { id: crypto.randomUUID(), startedAt: new Date().toISOString(), endedAt: null,
+    metadata: { id: createId(), startedAt: new Date().toISOString(), endedAt: null,
       exercise: exercise.trim(), mode: 'padrao', loadKg, notes, deviceName,
       sampleRateHz, source, firmwareVersion, status: 'recording' },
     samples: [], quality: blankQuality(), derived: blankDerived(),
@@ -40,6 +50,8 @@ export function createSeries({ exercise, loadKg, notes = '', source = 'bluetooth
 
 function track(quality, tracker, sample) {
   const [seq, time] = sample;
+  tracker.minUs = Math.min(tracker.minUs ?? Infinity, time);
+  tracker.maxUs = Math.max(tracker.maxUs ?? -Infinity, time);
   const key = `${seq}:${time}`;
   if (tracker.seen.has(key)) quality.duplicates++;
   else {
@@ -76,6 +88,15 @@ export function finishSeries(series, status = 'complete') {
   series.metadata.endedAt = new Date().toISOString();
   series.metadata.status = status;
   return series;
+}
+
+export function seriesDurationSeconds(series) {
+  if (!series?.samples.length) return 0;
+  const tracker = trackers.get(series);
+  if (tracker) return (tracker.maxUs - tracker.minUs) / 1e6;
+  let min = Infinity, max = -Infinity;
+  for (const sample of series.samples) { min = Math.min(min, sample[1]); max = Math.max(max, sample[1]); }
+  return (max - min) / 1e6;
 }
 
 export function validateSeries(value) {
@@ -127,11 +148,12 @@ const csvFields = ['schemaVersion', ...metadataFields, ...sampleFields];
 const csvCell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
 
 export function serializeCSV(values) {
-  const lines = [csvFields.join(',')];
+  const lines = [[...csvFields, 'metadata_extra_json'].join(',')];
   for (const series of validateCollection(values)) {
     const metadata = [1, ...metadataFields.map(key => series.metadata[key])];
+    const extras = JSON.stringify(Object.fromEntries(Object.entries(series.metadata).filter(([key]) => !metadataFields.includes(key))));
     for (const sample of series.samples.length ? series.samples : [Array(8).fill('')]) {
-      lines.push([...metadata, ...sample].map(csvCell).join(','));
+      lines.push([...metadata, ...sample, extras].map(csvCell).join(','));
     }
   }
   return lines.join('\r\n') + '\r\n';
@@ -173,7 +195,15 @@ export function parseCSV(text) {
     if (row.length !== header.length) throw new Error('CSV inválido: quantidade de colunas inconsistente.');
     const record = Object.fromEntries(header.map((name, i) => [name, row[i]]));
     if (record.schemaVersion !== '1') throw new Error('CSV com versão não suportada.');
-    const metadata = Object.fromEntries(metadataFields.map(key => [key, record[key]]));
+    let extras = {};
+    if (record.metadata_extra_json) {
+      try { extras = JSON.parse(record.metadata_extra_json); }
+      catch { throw new Error('CSV com extensão de metadados JSON inválida.'); }
+      if (!extras || typeof extras !== 'object' || Array.isArray(extras) || metadataFields.some(key => Object.hasOwn(extras, key))) {
+        throw new Error('CSV com extensão de metadados inválida.');
+      }
+    }
+    const metadata = { ...Object.fromEntries(metadataFields.map(key => [key, record[key]])), ...extras };
     metadata.loadKg = metadata.loadKg.trim() === '' ? NaN : Number(metadata.loadKg);
     metadata.sampleRateHz = metadata.sampleRateHz.trim() === '' ? NaN : Number(metadata.sampleRateHz);
     metadata.endedAt ||= null;

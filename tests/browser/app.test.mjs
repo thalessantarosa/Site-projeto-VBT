@@ -21,6 +21,11 @@ test('demonstração salva, recarrega, filtra, compara, exporta e restaura séri
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url);
+    await page.screenshot({ path: 'test-results/capture-desktop.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: 'test-results/capture-mobile.png', fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1080 });
     await page.locator('#demo').click();
     await page.locator('#save-destination').selectOption('browser');
     await page.locator('#save').click();
@@ -61,9 +66,47 @@ test('demonstração salva, recarrega, filtra, compara, exporta e restaura séri
     await page.waitForFunction(() => document.querySelectorAll('#series-rows tr').length === 11);
     await page.locator('#compare').click();
     assert.equal(await page.locator('#analysis-rows tr').count(), 11);
+    assert.equal(await page.locator('#library-count').textContent(), '11');
+    assert.equal(await page.locator('#chart-legend svg line').evaluateAll(lines => new Set(lines.map(line => `${line.getAttribute('stroke')}/${line.getAttribute('stroke-dasharray')}`)).size), 11);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.screenshot({ path: 'test-results/analysis-mobile.png', fullPage: true });
     assert.deepEqual(errors, []);
+  });
+});
+
+test('sem Bluetooth ou IndexedDB a demonstração continua exportável; cache permite reabrir offline', { timeout: 45000 }, async () => {
+  await withApp(async (browser, url) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true, reducedMotion: 'reduce' });
+    await context.addInitScript(() => {
+      Object.defineProperty(window, 'indexedDB', { value: undefined });
+      Object.defineProperty(navigator, 'bluetooth', { value: undefined });
+      Object.defineProperty(crypto, 'randomUUID', { value: undefined });
+    });
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.skip-link').evaluate(el => el === document.activeElement), true);
+    assert.equal(await page.locator('#connect').isDisabled(), true);
+    await page.waitForFunction(() => document.getElementById('notice-text').textContent.includes('armazenamento'));
+    await page.locator('#demo').click();
+    await page.locator('#save-destination').selectOption('json');
+    const event = page.waitForEvent('download');
+    await page.locator('#save').click();
+    const result = parseJSON(await readFile(await (await event).path(), 'utf8'));
+    assert.equal(result[0].metadata.source, 'synthetic');
+    assert.equal(result[0].samples.length, 1200);
+    await page.waitForFunction(() => document.getElementById('save-panel').hidden);
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+    });
+    await context.setOffline(true);
+    await page.reload();
+    await page.locator('#demo').click();
+    assert.equal(await page.locator('#save-panel').isVisible(), true);
+    assert.equal(await page.locator('#network-status').textContent(), 'Sem rede · dados locais disponíveis');
+    await page.close({ runBeforeUnload: false });
+    await context.close();
   });
 });

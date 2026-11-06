@@ -1,8 +1,8 @@
-import { serializeJSON, parseJSON, serializeCSV, parseCSV } from './core.js';
+import { serializeJSON, parseJSON, serializeCSV, parseCSV, seriesDurationSeconds as duration } from './core.js';
 import { BluetoothDevice } from './bluetooth.js';
 import { CaptureController } from './capture.js';
 import { SeriesStore } from './storage.js';
-import { drawChart, SERIES_COLORS, SERIES_DASHES } from './chart.js';
+import { drawChart, seriesStyle } from './chart.js';
 
 const $ = id => document.getElementById(id);
 const store = new SeriesStore();
@@ -23,7 +23,7 @@ function notify(message, type = 'success') {
 }
 function errorMessage(error) { return error instanceof Error ? error.message : String(error); }
 async function action(task) {
-  if (busy) return;
+  if (busy || capture.busy) return;
   busy = true; renderCapture();
   try { await task(); } catch (error) { notify(errorMessage(error), 'error'); }
   finally { busy = false; renderCapture(); renderSelection(); }
@@ -58,11 +58,6 @@ function metadata(demo = false) {
   }
   return { exercise, loadKg, notes: $('notes').value.trim() };
 }
-function duration(series) {
-  if (!series || series.samples.length === 0) return 0;
-  const samples = series.samples;
-  return Math.max(0, (samples[samples.length - 1][1] - samples[0][1]) / 1e6);
-}
 function timeText(seconds, detail = false) {
   const minutes = Math.floor(seconds / 60), remainder = Math.floor(seconds % 60);
   const basic = `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
@@ -79,25 +74,26 @@ function sourceBadge(series) {
 function formatDate(value) { const d = new Date(value); return Number.isNaN(d.valueOf()) ? 'Data indisponível' : date.format(d); }
 function renderCapture() {
   const state = capture.state, series = capture.series;
+  const locked = busy || capture.busy;
   const active = ['starting', 'recording', 'stopping'].includes(state);
   const pending = state === 'pending';
-  $('metadata-fields').disabled = busy || active || pending;
-  $('connect').disabled = busy || active || pending || !navigator.bluetooth || !window.isSecureContext;
+  $('metadata-fields').disabled = locked || active || pending;
+  $('connect').disabled = locked || active || pending || !navigator.bluetooth || !window.isSecureContext;
   $('connect').textContent = device.connected ? 'Desconectar sensor' : 'Conectar ESP32';
   $('connection-label').textContent = device.connected ? (device.name || 'ESP32 conectado') : 'Sensor desconectado';
   $('connection-dot').className = `status-dot ${state === 'recording' ? 'recording' : device.connected ? 'connected' : ''}`;
   $('sensor-help').textContent = device.connected ? `${device.name || 'ESP32'} conectado e disponível.` : 'Use o ESP32 com o protocolo VBT Lab.';
   $('start').hidden = active;
-  $('start').disabled = busy || state !== 'ready';
+  $('start').disabled = locked || state !== 'ready';
   $('stop').hidden = !active;
-  $('stop').disabled = busy || state !== 'recording';
+  $('stop').disabled = locked || state !== 'recording';
   $('stop').textContent = state === 'starting' ? 'Iniciando…' : state === 'stopping' ? 'Finalizando…' : '■ Finalizar série';
-  $('demo').disabled = busy || active || pending;
+  $('demo').disabled = locked || active || pending;
   $('capture-state').textContent = stateLabels[state] || state;
   $('capture-state').className = `badge ${state === 'recording' || state === 'ready' ? 'active' : pending ? 'warning' : ''}`;
   $('capture-help').textContent = pending ? 'Salve ou descarte a série antes de continuar.' : state === 'recording' ? 'Mantenha esta página aberta durante a captura.' : state === 'ready' ? 'O relógio de aquisição será o do ESP32.' : active ? 'Aguardando confirmação do sensor…' : 'Conecte um sensor para iniciar a captura.';
   $('save-panel').hidden = !pending;
-  $('save').disabled = busy; $('discard').disabled = busy; $('save-destination').disabled = busy;
+  $('save').disabled = locked; $('discard').disabled = locked; $('save-destination').disabled = locked;
   if (pending && series) {
     $('pending-source').textContent = sourceName(series);
     $('pending-source').className = `badge ${series.metadata.source === 'synthetic' ? 'synthetic' : 'active'}`;
@@ -191,8 +187,11 @@ function renderAnalysis() {
   const series = library.filter(item => selected.has(item.metadata.id));
   const channel = $('channel').value, normalized = $('time-scale').value === 'normalized';
   $('analysis-count').textContent = `${series.length} ${series.length === 1 ? 'série selecionada' : 'séries selecionadas'}`;
-  $('analysis-empty').hidden = series.length > 0;
-  $('analysis-summary').hidden = series.length === 0;
+  const hasSamples = series.some(item => item.samples.length > 0);
+  $('analysis-empty').hidden = hasSamples;
+  $('analysis-summary').hidden = !hasSamples;
+  $('analysis-empty').querySelector('strong').textContent = series.length ? 'As séries selecionadas não têm amostras' : 'Compare suas execuções';
+  $('analysis-empty').querySelector('p').textContent = series.length ? 'Selecione outra série na biblioteca para comparar os sinais.' : 'Selecione uma ou mais séries na biblioteca para visualizar os sinais sobrepostos.';
   const rows = drawChart($('analysis-chart'), series, channel, normalized);
   const channelName = $('channel').selectedOptions[0].textContent;
   $('analysis-chart').setAttribute('aria-label', `${channelName}, ${normalized ? 'tempo normalizado em porcentagem' : 'tempo de aquisição em segundos'}, ${series.length} séries. Resumo numérico na tabela abaixo.`);
@@ -200,8 +199,13 @@ function renderAnalysis() {
   for (let index = 0; index < rows.length; index++) {
     const { series: item, min, max } = rows[index];
     const label = document.createElement('div'); label.className = 'legend-item';
-    const swatch = document.createElement('span'); swatch.className = 'legend-line'; swatch.style.borderColor = SERIES_COLORS[index % SERIES_COLORS.length];
-    swatch.style.borderTopStyle = SERIES_DASHES[index % SERIES_DASHES.length].length ? 'dashed' : 'solid';
+    const style = seriesStyle(index);
+    const swatch = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    swatch.setAttribute('width', '28'); swatch.setAttribute('height', '10'); swatch.setAttribute('viewBox', '0 0 28 10');
+    swatch.setAttribute('aria-hidden', 'true'); swatch.style.flexShrink = '0';
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    for (const [key, value] of Object.entries({ x1: 0, x2: 28, y1: 5, y2: 5, stroke: style.color, 'stroke-width': 2, 'stroke-dasharray': style.dash.join(' ') })) line.setAttribute(key, value);
+    swatch.append(line);
     const name = document.createElement('span'); name.textContent = `${index + 1}. ${title(item)} · ${sourceName(item)}`;
     label.append(swatch, name); legend.append(label);
     const row = document.createElement('tr');

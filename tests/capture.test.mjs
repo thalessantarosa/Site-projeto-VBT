@@ -80,3 +80,23 @@ test('falha de confirmação START ou STOP deixa uma série interrompida para ex
   assert.equal(capture.series.metadata.status, 'interrupted');
   assert.equal(capture.series.samples.length, 1);
 });
+
+test('interrupção mantém barreira de recuperação até STOP confirmar ou desconectar', async () => {
+  const device = new FakeDevice();
+  let stopped;
+  device.stop = () => new Promise(resolve => { stopped = resolve; });
+  const capture = new CaptureController({ device, store: {} });
+  await capture.connect();
+  await capture.start(meta);
+  device.sample();
+  device.dispatchEvent(new CustomEvent('error', { detail: new Error('amostra inválida') }));
+  assert.equal(capture.state, 'pending');
+  await assert.rejects(capture.save('json'), /Aguarde/);
+  assert.equal(capture.busy, true);
+  stopped();
+  await new Promise(resolve => setImmediate(resolve));
+  const series = await capture.save('json');
+  assert.equal(series.metadata.status, 'interrupted');
+  capture.release();
+  assert.equal(capture.state, 'ready');
+});
