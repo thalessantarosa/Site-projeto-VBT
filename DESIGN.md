@@ -1,6 +1,6 @@
 # Design — VBT Lab
 
-Direção confirmada: instrumento de laboratório simples em português, conforme o escopo aprovado. Implementação da jornada em [JOURNEY.md](JOURNEY.md).
+Direção: instrumento de laboratório simples em português. O escopo atual e as próximas etapas estão no [README.md](README.md).
 
 ## Identidade e tokens
 
@@ -37,6 +37,6 @@ Escala: 12/14/16/20/24/32/40 px em rem. Corpo 14–16 px, entrelinha 1,5; títul
 
 ## Verificação
 
-Contraste calculado por luminância relativa sRGB: texto/superfície 14,45:1; texto secundário/superfície 5,83:1; texto secundário/fundo 5,34:1; branco/ação principal 7,05:1; aviso âmbar 6,46:1; erro 6,44:1; verde/superfície verde 6,06:1. Todos os pares textuais principais passam AA.
+Contraste calculado por luminância relativa sRGB: texto/superfície 14,45:1; texto secundário/superfície 5,83:1; texto secundário/fundo 5,34:1; branco/ação principal 7,05:1; aviso âmbar 6,46:1; erro 6,44:1; verde/superfície verde 6,06:1. Bordas dos campos e botões secundários usam #7a8980 (3,67:1 sobre branco); placeholders usam --text-muted (5,83:1). Pares textuais e limites de componentes passam AA.
 
-Sintaxe dos módulos de interface verificada com `node --check`. Verificação consolidada no navegador deve cobrir ausência de overflow global a 390 px, teclado, estados vazios e análise de múltiplas séries. Evidência da execução e eventuais limitações serão registradas pelo fluxo de validação do projeto.
+Sintaxe, fluxo sintético, ausência de overflow global a 390 px, teclado e análise de 11 séries verificados no Chromium. As linhas e legendas usam 36 combinações distintas de cor/padrão antes de repetir. Revisão visual independente passou após as correções. Comandos de verificação e limitações no [README.md](README.md).
