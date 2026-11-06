@@ -1,0 +1,20 @@
+{
+  "name": "vbt-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Captura local de sinais de uma IMU com ESP32 e Web Bluetooth",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node --test tests/browser/*.test.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.7",
+    "playwright": "^1.65.0"
+  }
+}

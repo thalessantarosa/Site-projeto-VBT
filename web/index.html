@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#176451">
+  <meta name="description" content="Capture e compare sinais de movimento da barra. Seus dados ficam no seu dispositivo.">
+  <title>VBT Lab — Registro de movimento</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Ir para o conteúdo</a>
+  <header class="app-header">
+    <a class="brand" href="#captura" aria-label="VBT Lab, captura"><img src="./icon.svg" width="34" height="34" alt=""><span>VBT <strong>Lab</strong></span><span class="version">PROTÓTIPO</span></a>
+    <nav class="main-nav" aria-label="Navegação principal">
+      <button type="button" data-view="captura" aria-current="page">Captura</button>
+      <button type="button" data-view="biblioteca">Biblioteca <span class="nav-count" id="library-count">0</span></button>
+      <button type="button" data-view="analise">Análise</button>
+    </nav>
+    <div class="connection-indicator"><span class="status-dot" id="connection-dot"></span><span id="connection-label">Sensor desconectado</span></div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <div class="notice" id="notice" role="status" aria-live="polite" hidden><span id="notice-text"></span><button id="notice-close" type="button" aria-label="Fechar aviso">×</button></div>
+
+    <section id="view-captura" aria-labelledby="capture-title">
+      <div class="page-heading"><div><p class="eyebrow">REGISTRO DE MOVIMENTO</p><h1 id="capture-title">Cada série, um novo registro.</h1><p class="intro">Capture os sinais da barra. Preserve os dados para entender o movimento.</p></div><span class="local-tag"><span aria-hidden="true">◉</span> Seus dados, no seu dispositivo</span></div>
+      <div class="capture-layout">
+        <div class="capture-controls">
+          <section class="panel sensor-panel" aria-labelledby="sensor-title"><div class="section-heading"><div><p class="step-label">01 / DISPOSITIVO</p><h2 id="sensor-title">Conecte seu sensor</h2></div><svg aria-hidden="true" class="bluetooth-icon" viewBox="0 0 24 24"><path d="m7 7 10 10-5 4V3l5 4L7 17"/></svg></div><p id="sensor-help" class="muted">Use o ESP32 com o protocolo VBT Lab.</p><button class="button secondary full" id="connect" type="button">Conectar ESP32</button><p class="support-note" id="bluetooth-support">Bluetooth requer Chrome/Edge e HTTPS ou localhost.</p></section>
+          <section class="panel" aria-labelledby="metadata-title"><p class="step-label">02 / NOVA SÉRIE</p><h2 id="metadata-title">Prepare a captura</h2>
+            <form id="capture-form" novalidate>
+              <fieldset id="metadata-fields"><legend class="sr-only">Dados da série</legend>
+                <label for="exercise">Exercício <span class="required">obrigatório</span></label><input id="exercise" name="exercise" list="exercises" placeholder="Ex.: Supino" maxlength="120" required aria-describedby="exercise-error"><datalist id="exercises"><option value="Supino"><option value="Agachamento"><option value="Levantamento terra"><option value="Desenvolvimento"></datalist><p class="field-error" id="exercise-error" hidden>Informe o exercício desta série.</p>
+                <label for="load">Carga total <span class="required">obrigatório</span></label><div class="input-unit"><input id="load" name="loadKg" type="number" min="0" step="any" inputmode="decimal" placeholder="0" required aria-describedby="load-help load-error"><span>kg</span></div><p class="field-help" id="load-help">Inclua o peso da barra.</p><p class="field-error" id="load-error" hidden>Informe uma carga válida, igual ou maior que zero.</p>
+                <label for="notes">Observações <span class="optional">opcional</span></label><textarea id="notes" name="notes" rows="2" maxlength="4000" placeholder="Execução, esforço, ajustes…"></textarea>
+              </fieldset>
+              <button class="button primary full" type="submit" id="start" disabled><span aria-hidden="true">●</span> Iniciar série</button>
+              <button class="button danger full" type="button" id="stop" hidden>■ Finalizar série</button>
+              <p class="action-help" id="capture-help">Conecte um sensor para iniciar a captura.</p>
+            </form>
+          </section>
+          <div class="demo-box"><div><strong>Explorar sem sensor</strong><p>Crie sinais sintéticos para conhecer o fluxo.</p></div><button type="button" class="text-button" id="demo">Criar demonstração <span aria-hidden="true">↗</span></button></div>
+        </div>
+
+        <div class="capture-monitor">
+          <section class="panel monitor-panel" aria-labelledby="signal-title"><div class="section-heading monitor-heading"><div><p class="step-label">03 / AQUISIÇÃO</p><h2 id="signal-title">Sinal em tempo real</h2></div><span class="badge" id="capture-state">Aguardando sensor</span></div>
+            <dl class="capture-stats"><div><dt>Duração</dt><dd id="duration">00:00<span>.0</span></dd></div><div><dt>Amostras</dt><dd id="sample-count">0</dd></div><div><dt>Lacunas</dt><dd id="missing-count">0</dd></div></dl>
+            <div class="signal-caption"><span><span class="line-key"></span>Aceleração Z <span class="muted">· m/s²</span></span><span class="mono" id="sample-rate">100 Hz nominal</span></div>
+            <div class="canvas-wrap live-canvas"><canvas id="live-chart" role="img" aria-label="Sinal de aceleração Z da série atual"></canvas><div class="chart-empty" id="live-empty"><span class="empty-signal" aria-hidden="true">⌁</span><strong>Seu próximo movimento começa aqui</strong><p>Conecte o ESP32 ou crie uma demonstração.<br>O sinal aparecerá durante a captura.</p></div></div>
+            <div class="monitor-footer"><span><span class="tiny-square" aria-hidden="true"></span> Sinais brutos, com gravidade</span><span id="live-source">Nenhuma série em andamento</span></div>
+          </section>
+
+          <section class="panel save-panel" id="save-panel" aria-labelledby="save-title" hidden><div class="section-heading"><div><p class="step-label">SÉRIE FINALIZADA</p><h2 id="save-title">Onde guardar este registro?</h2></div><span class="badge" id="pending-source"></span></div><p class="muted" id="pending-description"></p><div class="save-actions"><div class="save-choice"><label for="save-destination" class="sr-only">Destino da série</label><select id="save-destination"><option value="browser">Somente no navegador</option><option value="json">Baixar arquivo JSON</option><option value="both" selected>Navegador + arquivo JSON</option></select></div><button type="button" class="button primary" id="save">Salvar série</button><button type="button" class="text-button danger-text" id="discard">Descartar</button></div><p class="field-help">Os dados do navegador ficam neste aparelho. Exporte arquivos para manter um backup.</p></section>
+
+          <aside class="science-note"><span class="note-icon" aria-hidden="true">i</span><div><h3>Primeiro o sinal. Depois, a velocidade.</h3><p>Esta versão registra aceleração e giroscópio. Velocidade, repetições e 1RM serão disponibilizados após calibração e validação.</p></div></aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-biblioteca" aria-labelledby="library-title" hidden>
+      <div class="page-heading"><div><p class="eyebrow">SEUS REGISTROS</p><h1 id="library-title">Biblioteca de séries</h1><p class="intro">Encontre uma execução. Compare o que mudou.</p></div><button class="button secondary" type="button" id="import">↓ Importar JSON / CSV</button><input type="file" id="import-file" accept=".json,.csv,application/json,text/csv" hidden></div>
+      <div class="panel library-panel"><div class="filters"><div class="search-field"><label for="search">Buscar séries</label><input type="search" id="search" placeholder="Exercício ou observação"></div><div><label for="exercise-filter">Exercício</label><select id="exercise-filter"><option value="">Todos os exercícios</option></select></div><div><label for="min-load">Carga mínima (kg)</label><input type="number" id="min-load" min="0" step="any" placeholder="Qualquer carga"></div></div>
+        <div class="library-toolbar"><span id="library-summary" class="muted" aria-live="polite">Carregando séries…</span><button class="text-button" id="clear-filters" type="button">Limpar filtros</button></div>
+        <div class="table-scroll" id="library-table-wrap"><table class="series-table"><thead><tr><th class="check-cell"><input id="select-all" type="checkbox" aria-label="Selecionar todas as séries visíveis"></th><th>Exercício / registro</th><th>Carga</th><th>Amostras</th><th>Qualidade</th><th>Origem</th></tr></thead><tbody id="series-rows"></tbody></table></div>
+        <div class="empty-state" id="library-empty" hidden><span class="empty-symbol" aria-hidden="true">▤</span><h2>Nenhuma série por aqui, ainda.</h2><p>Registre sua primeira série ou importe um arquivo JSON ou CSV.</p><button class="button primary" type="button" data-view="captura">Ir para captura</button></div>
+        <div class="empty-state" id="no-results" hidden><h2>Nenhuma série encontrada</h2><p>Ajuste a busca ou limpe os filtros para ver os registros.</p></div>
+        <div class="selection-toolbar"><strong id="selection-count" aria-live="polite">0 selecionadas</strong><div class="selection-actions"><button class="button primary compact" type="button" id="compare" disabled>Ver gráficos <span aria-hidden="true">↗</span></button><button class="button secondary compact" type="button" id="export-json" disabled>Exportar JSON</button><button class="button secondary compact" type="button" id="export-csv" disabled>Exportar CSV</button><button class="text-button danger-text" type="button" id="delete" disabled>Excluir</button></div></div>
+      </div><p class="storage-note">Armazenamento local deste navegador. Para acessar em outro aparelho, exporte e importe seus arquivos.</p>
+    </section>
+
+    <section id="view-analise" aria-labelledby="analysis-title" hidden>
+      <div class="page-heading"><div><p class="eyebrow">COMPARAÇÃO DE SINAIS</p><h1 id="analysis-title">Observe o movimento</h1><p class="intro">Sobreponha os registros e explore os seis eixos da IMU.</p></div><button class="button secondary" type="button" data-view="biblioteca">Selecionar séries</button></div>
+      <section class="panel analysis-panel"><div class="analysis-controls"><div><label for="channel">Canal</label><select id="channel"><optgroup label="Aceleração · m/s²"><option value="az">Aceleração Z</option><option value="ax">Aceleração X</option><option value="ay">Aceleração Y</option><option value="aMag">Magnitude da aceleração</option></optgroup><optgroup label="Giroscópio · rad/s"><option value="gx">Giroscópio X</option><option value="gy">Giroscópio Y</option><option value="gz">Giroscópio Z</option><option value="gMag">Magnitude do giroscópio</option></optgroup></select></div><div><label for="time-scale">Eixo temporal</label><select id="time-scale"><option value="real">Tempo de aquisição (s)</option><option value="normalized">Duração normalizada (%)</option></select></div><p class="muted" id="analysis-count">Nenhuma série selecionada</p></div>
+        <div class="canvas-wrap analysis-canvas"><canvas id="analysis-chart" role="img" aria-label="Comparação do canal selecionado entre séries"></canvas><div class="chart-empty" id="analysis-empty"><span class="empty-signal" aria-hidden="true">⌁</span><strong>Compare suas execuções</strong><p>Selecione uma ou mais séries na biblioteca<br>para visualizar os sinais sobrepostos.</p><button class="button secondary" type="button" data-view="biblioteca">Abrir biblioteca</button></div></div><div class="chart-legend" id="chart-legend" aria-label="Legenda das séries"></div>
+      </section>
+      <div class="panel analysis-summary" id="analysis-summary" hidden><h2>Resumo da seleção</h2><div class="table-scroll"><table><thead><tr><th>Série</th><th>Duração</th><th>Amostras</th><th>Lacunas / fora de ordem</th><th>Faixa do canal</th></tr></thead><tbody id="analysis-rows"></tbody></table></div></div>
+      <aside class="science-note"><span class="note-icon" aria-hidden="true">i</span><div><h3>Como ler estes sinais</h3><p>A aceleração inclui a gravidade. A magnitude não representa velocidade. Lacunas aparecem como interrupções na linha. VMC e estimativa de 1RM: indisponíveis nesta versão.</p></div></aside>
+    </section>
+  </main>
+  <footer class="app-footer"><span>VBT Lab <span class="muted">/</span> Movimento em dados.</span><span id="network-status">Local por princípio.</span></footer>
+  <noscript><p class="notice">Ative o JavaScript no navegador para registrar e visualizar as séries.</p></noscript>
+</body>
+</html>
